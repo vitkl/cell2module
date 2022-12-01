@@ -1,15 +1,12 @@
-# scvi-tools-skeleton
+# cell2module
+cell2module: gene module discovery from scRNA and scATAC using count-based Bayesian NMF
 
-[![Stars](https://img.shields.io/github/stars/YosefLab/scvi-tools-skeleton?logo=GitHub&color=yellow)](https://github.com/YosefLab/scvi-tools/stargazers)
-[![Documentation Status](https://readthedocs.org/projects/scvi-tools-skeleton/badge/?version=latest)](https://scvi-tools-skeleton.readthedocs.io/en/stable/?badge=stable)
-![Build Status](https://github.com/YosefLab/scvi-tools-skeleton/workflows/scvi-tools-skeleton/badge.svg)
-[![codecov](https://codecov.io/gh/YosefLab/scvi-tools-skeleton/branch/main/graph/badge.svg?token=BGI9Z8R11R)](https://codecov.io/gh/YosefLab/scvi-tools-skeleton)
+[![Stars](https://img.shields.io/github/stars/vitkl/cell2module?logo=GitHub&color=yellow)](https://github.com/vitkl/cell2module/stargazers)
+[![Documentation Status](https://readthedocs.org/projects/cell2module/badge/?version=latest)](https://cell2module.readthedocs.io/en/stable/?badge=stable)
+![Build Status](https://github.com/vitkl/cell2module/workflows/cell2module/badge.svg)
+[![codecov](https://codecov.io/gh/vitkl/cell2module/branch/main/graph/badge.svg?token=BGI9Z8R11R)](https://codecov.io/gh/vitkl/cell2module)
 [![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/python/black)
 
-Skeleton repository for creating novel models with
-[scvi-tools](https://www.scvi-tools.org/en/stable/). For questions about
-using this skeleton, please use the scvi-tools
-[forum](https://discourse.scvi-tools.org/).
-
-
-Getting started development using this skeleton is similar to [getting started](https://docs.scvi-tools.org/en/stable/contributing/index.html) with scvi-tools.
+For questions about
+using cell2module, please use the scverse
+[forum](https://discourse.scverse.org/).
