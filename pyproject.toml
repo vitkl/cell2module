@@ -22,7 +22,8 @@ urls.Home-page = "https://github.com/vitkl/cell2module"
 dependencies = [
     "anndata",
     # for debug logging (referenced from the issue template)
-    "session-info"
+    "session-info",
+    "cell2location>=0.1.2"
 ]
 
 [project.optional-dependencies]

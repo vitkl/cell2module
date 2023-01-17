@@ -2,7 +2,6 @@
 [flake8]
 max-line-length = 120
 ignore =
-    # line break before a binary operator -> black does not adhere to PEP8
     W503
     # line break occured after a binary operator -> black does not adhere to PEP8
     W504
@@ -38,6 +37,20 @@ ignore =
     D400
     # First line should be in imperative mood; try rephrasing
     D401
+    E203
+    E266
+    E501
+    W503
+    W605
+    N812
+    C408
+    D102
+    B006
+    D101
+    RST210
+    RST301
+    RST201
+    D202
 exclude = .git,__pycache__,build,docs/_build,dist
 per-file-ignores =
     tests/*: D
