@@ -261,7 +261,10 @@ class MultimodalNMFPyroModel(PyroModule):
         x_data = tensor_dict[REGISTRY_KEYS.X_KEY]
         ind_x = tensor_dict["ind_x"].long().squeeze()
         batch_index = tensor_dict[REGISTRY_KEYS.BATCH_KEY]
-        label_index = tensor_dict[REGISTRY_KEYS.LABELS_KEY]
+        if REGISTRY_KEYS.LABELS_KEY in tensor_dict.keys():
+            label_index = tensor_dict[REGISTRY_KEYS.LABELS_KEY]
+        else:
+            label_index = tensor_dict[REGISTRY_KEYS.BATCH_KEY]
         rna_index = tensor_dict["rna_index"].bool()
         chr_index = tensor_dict["chr_index"].bool()
         extra_categoricals = tensor_dict[REGISTRY_KEYS.CAT_COVS_KEY]
@@ -336,7 +339,8 @@ class MultimodalNMFPyroModel(PyroModule):
         var_categoricals,
     ):
         obs2sample = one_hot(batch_index, self.n_batch)
-        obs2label = one_hot(label_index, self.n_labels)
+        if self.n_labels > 0:
+            obs2label = one_hot(label_index, self.n_labels)
         obs2extra_categoricals = torch.cat(
             [
                 one_hot(

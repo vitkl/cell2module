@@ -1,4 +1,5 @@
 import logging
+import warnings
 from typing import List, Optional, Union
 
 import numpy as np
@@ -89,11 +90,12 @@ class Cell2ModuleModel(
         # create factor names
         self.n_factors_ = n_factors
         if factor_names is None:
-            if self.summary_stats["n_labels"] > 0:
+            if "n_labels" in self.summary_stats:  # and self.summary_stats["n_labels"] > 0:
                 self.factor_names_ = {
                     "factor_names": np.array([f"factor_{i}" for i in range(n_factors)]),
                     "labels": self.adata_manager.get_state_registry(REGISTRY_KEYS.LABELS_KEY).categorical_mapping,
                 }
+                model_kwargs["n_labels"] = self.summary_stats["n_labels"]
             else:
                 self.factor_names_ = np.array([f"factor_{i}" for i in range(n_factors)])
         else:
@@ -117,7 +119,6 @@ class Cell2ModuleModel(
         model_kwargs["n_obs"] = self.summary_stats["n_cells"]
         model_kwargs["n_vars"] = self.summary_stats["n_vars"]
         model_kwargs["n_batch"] = self.summary_stats["n_batch"]
-        model_kwargs["n_labels"] = self.summary_stats["n_labels"]
         model_kwargs["gene_bool"] = self.adata_manager.adata.var["_gene_bool"].values
 
         self.module = RegressionBaseModule(
@@ -227,6 +228,8 @@ class Cell2ModuleModel(
         lr: Optional[float] = None,
         plan_kwargs: Optional[dict] = None,
         use_aggressive_training: bool = True,
+        ignore_warnings: bool = False,
+        scale_elbo: float = None,
         **trainer_kwargs,
     ):
         """
@@ -267,6 +270,10 @@ class Cell2ModuleModel(
         plan_kwargs = plan_kwargs if isinstance(plan_kwargs, dict) else dict()
         if lr is not None and "optim" not in plan_kwargs.keys():
             plan_kwargs.update({"optim_kwargs": {"lr": lr}})
+        if scale_elbo != 1.0:
+            if scale_elbo is None:
+                scale_elbo = 1.0 / (self.summary_stats["n_cells"] * self.summary_stats["n_vars"])
+            plan_kwargs["scale_elbo"] = scale_elbo
 
         if batch_size is None:
             # use data splitter which moves data to GPU once
@@ -307,7 +314,10 @@ class Cell2ModuleModel(
             use_gpu=use_gpu,
             **trainer_kwargs,
         )
-        res = runner()
+        with warnings.catch_warnings():
+            if ignore_warnings:
+                warnings.simplefilter("ignore")
+            res = runner()
         if use_aggressive_training:
             self.mi_ = self.mi_ + training_plan.mi
         return res
@@ -351,7 +361,7 @@ class Cell2ModuleModel(
         sample_kwargs: Optional[dict] = None,
         export_slot: str = "mod",
         export_varm_variables: list = ["g_fg", "cell_type_g_zg"],
-        export_obsm_variables: list = ["cell_factors_w_cf", "cell_type_modules_w_cz"],
+        export_obsm_variables: list = ["cell_modules_w_cf", "cell_type_modules_w_cz"],
         add_to_varm: list = ["means", "stds", "q05", "q95"],
         add_to_obsm: Optional[list] = None,
         factor_names_keys: Optional[dict] = None,

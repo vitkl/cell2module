@@ -33,7 +33,7 @@ def test_cell2location(use_orthogonality_constraint, amortised):
     # export the estimated cell abundance (summary of the posterior distribution)
     factor_names_keys = {
         "g_fg": "factor_names",
-        "cell_factors_w_cf": "factor_names",
+        "cell_modules_w_cf": "factor_names",
         "cell_type_g_zg": "labels",
         "cell_type_modules_w_cz": "labels",
     }
@@ -50,13 +50,14 @@ def test_cell2location(use_orthogonality_constraint, amortised):
     )
     sc_model.plot_QC(summary_name="q50")
     # TODO fix posterior sampling 0-dim array issue
-    # dataset = sc_model.export_posterior(
-    #    dataset, sample_kwargs={"num_samples": 20, "batch_size": 50},
-    #    use_quantiles=False,
-    #    factor_names_keys=factor_names_keys,
-    # )
+    dataset = sc_model.export_posterior(
+        dataset,
+        sample_kwargs={"num_samples": 20, "batch_size": 50},
+        use_quantiles=False,
+        factor_names_keys=factor_names_keys,
+    )
     # test plot_QC
-    # sc_model.plot_QC()
+    sc_model.plot_QC()
 
     # test save/load
     # TODO fix issue with saving anndata
@@ -74,8 +75,9 @@ def test_cell2location(use_orthogonality_constraint, amortised):
     )
     sc_model.plot_QC(summary_name="q50")
     # TODO fix posterior sampling 0-dim array issue
-    # dataset = sc_model.export_posterior(
-    #    dataset, sample_kwargs={"num_samples": 20, "batch_size": 50},
-    #    use_quantiles=False,
-    #    factor_names_keys=factor_names_keys,
-    # )
+    dataset = sc_model.export_posterior(
+        dataset,
+        sample_kwargs={"num_samples": 20, "batch_size": 50},
+        use_quantiles=False,
+        factor_names_keys=factor_names_keys,
+    )
