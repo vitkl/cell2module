@@ -22,6 +22,7 @@ repos:
       rev: v2.5.1
       hooks:
           - id: prettier
+            language_version: "17.9.1"
     - repo: https://github.com/asottile/yesqa
       rev: v1.4.0
       hooks:
