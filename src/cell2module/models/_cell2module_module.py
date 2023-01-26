@@ -755,9 +755,9 @@ class MultimodalNMFPyroModel(PyroModule):
         )
 
         # per cell biological expression
-        mu_biol = np.dot(samples["cell_modules_w_cf"][ind_x, :], samples["g_fg"]) + np.dot(
-            samples["cell_type_modules_w_cz"][ind_x, :], samples["cell_type_g_zg"]
-        )
+        mu_biol = np.dot(samples["cell_modules_w_cf"][ind_x, :], samples["g_fg"])
+        if "cell_type_modules_w_cz" in samples:
+            mu_biol = mu_biol + np.dot(samples["cell_type_modules_w_cz"][ind_x, :], samples["cell_type_g_zg"])
         mu = (
             (mu_biol + np.dot(obs2sample, samples["s_g_gene_add"]))  # contaminating RNA
             * samples["detection_y_c"][ind_x, :]
@@ -796,7 +796,9 @@ class MultimodalNMFPyroModel(PyroModule):
         mu_biol = np.dot(
             samples["cell_modules_w_cf"][cell_ind, fact_ind],
             samples["g_fg"][fact_ind, :],
-        ) + np.dot(samples["cell_type_modules_w_cz"][cell_ind, :], samples["cell_type_g_zg"])
+        )
+        if "cell_type_modules_w_cz" in samples:
+            mu_biol = mu_biol + np.dot(samples["cell_type_modules_w_cz"][cell_ind, :], samples["cell_type_g_zg"])
         mu = (
             (mu_biol + np.dot(obs2sample[cell_ind, :], samples["s_g_gene_add"]))  # contaminating RNA
             * samples["detection_y_c"][cell_ind, :]

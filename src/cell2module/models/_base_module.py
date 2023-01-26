@@ -3,6 +3,7 @@ from typing import Literal, Optional
 import numpy as np
 import pandas as pd
 from cell2location.models.base._pyro_mixin import AutoGuideMixinModule, init_to_value
+from pyro.infer.autoguide import init_to_mean
 from scipy.sparse import csr_matrix
 from scvi.module.base import PyroBaseModuleClass
 
@@ -147,4 +148,4 @@ class RegressionBaseModule(PyroBaseModuleClass, AutoGuideMixinModule):
             init_vals = {k: getattr(self.model, f"init_val_{k}") for k in self.model.np_init_vals.keys()}
         else:
             init_vals = dict()
-        return init_to_value(site=site, values=init_vals)
+        return init_to_value(site=site, values=init_vals, init_fn=init_to_mean)
