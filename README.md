@@ -26,6 +26,9 @@ There are several alternative options to install cell2module:
 1) Install the latest release of `cell2module` from `PyPI <https://pypi.org/project/cell2module/>`_:
 
 ```bash
+export PYTHONNOUSERSITE="aaaaa"
+conda create -y -n cell2module_v01 python=3.9
+conda activate cell2module_v01
 pip install cell2module
 ```
 -->
