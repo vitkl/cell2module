@@ -662,7 +662,7 @@ class MultimodalNMFPyroModel(PyroModule):
             if self.n_labels > 0:
                 g_fg = torch.cat([g_fg, cell_type_g_zg], dim=-2)
             if self.use_orthogonality_constraint:
-                zero_diag = -torch.diag(self.ones.expand(g_fg.shape[-2])) + self.ones
+                zero_diag = -torch.diag(torch.tensor(1.0, device=x_data.device).expand(g_fg.shape[-2])) + self.ones
                 pyro.sample(
                     "g_fg_constraint",
                     dist.Normal(((g_fg @ g_fg.T) * zero_diag).sum(), self.ones / (self.ten * self.ten)).to_event(2),
@@ -685,7 +685,7 @@ class MultimodalNMFPyroModel(PyroModule):
             if self.n_labels > 0:
                 g_fr = torch.cat([g_fr, cell_type_g_fr], dim=-2)
             if self.use_orthogonality_constraint:
-                zero_diag = -torch.diag(self.ones.expand(g_fr.shape[-2])) + self.ones
+                zero_diag = -torch.diag(torch.tensor(1.0, device=x_data.device).expand(g_fr.shape[-2])) + self.ones
                 pyro.sample(
                     "g_fr_constraint",
                     dist.Normal(((g_fr @ g_fr.T) * zero_diag).sum(), self.ones / (self.ten * self.ten)).to_event(2),
