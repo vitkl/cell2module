@@ -78,6 +78,7 @@ class MultimodalNMFPyroModel(PyroModule):
         chromatin_model: bool = False,
         use_binary_chromatin: bool = False,
         use_orthogonality_constraint: bool = False,
+        use_amortised_cell_loadings_as_prior: bool = False,
     ):
         """
         Create a Cell2module model.
@@ -112,6 +113,7 @@ class MultimodalNMFPyroModel(PyroModule):
 
         self.use_binary_chromatin = use_binary_chromatin
         self.use_orthogonality_constraint = use_orthogonality_constraint
+        self.use_amortised_cell_loadings_as_prior = use_amortised_cell_loadings_as_prior
 
         self.gene_bool = gene_bool.astype(int).flatten()
         self.gene_ind = np.where(gene_bool)[0]
@@ -321,6 +323,7 @@ class MultimodalNMFPyroModel(PyroModule):
                 "detection_y_c": 1,
                 "detection_chr_y_c": 1,
                 "factors_per_cell": 1,
+                "cell_modules_w_cf_amortised_prior": self.n_factors,
                 "cell_modules_w_cf": self.n_factors,
                 "cell_type_modules_w_cz_prior": 1,
                 "cell_type_modules_w_cz": self.n_labels,
@@ -381,16 +384,27 @@ class MultimodalNMFPyroModel(PyroModule):
                 w_c_dist,
             )  # (self.n_obs, 1)
             k = "cell_modules_w_cf"
-            # defining the variable as normally
-            w_cf_dist = dist.Gamma(
-                factors_per_cell / self.n_factors_torch,
-                self.ones_1_n_factors,
-            )
+            if self.use_amortised_cell_loadings_as_prior:
+                k_ = k
+                k = k + "_amortised_prior"
             cell_modules_w_cf = pyro.sample(
                 k,
-                w_cf_dist,
+                dist.Gamma(
+                    factors_per_cell / self.n_factors_torch,
+                    self.ones_1_n_factors,
+                ),
                 obs=apply_plate_to_fixed(getattr(self, f"fixed_val_{k}", None), ind),
             )  # (self.n_obs, self.n_factors)
+            if self.use_amortised_cell_loadings_as_prior:
+                cell_modules_w_cf_weight = pyro.sample(
+                    f"{k_}_weight",
+                    dist.Gamma(
+                        self.ten * self.ones_1_n_factors,
+                        self.ten,
+                    ),
+                    obs=apply_plate_to_fixed(getattr(self, f"fixed_val_{k_}_weight", None), ind),
+                )  # (self.n_obs, self.n_factors)
+                cell_modules_w_cf = pyro.deterministic(k_, cell_modules_w_cf * cell_modules_w_cf_weight)
         # cell-type module activities - w_{c, z}
         if self.n_labels > 0:
             with obs_plate as ind:
@@ -421,16 +435,11 @@ class MultimodalNMFPyroModel(PyroModule):
                 .expand([self.n_batch, 1])
                 .to_event(2),
             )
-            detection_hyp_prior_alpha = pyro.deterministic(
-                "detection_hyp_prior_alpha",
-                self.detection_hyp_prior_alpha,
-            )
-
-            beta = detection_hyp_prior_alpha / (obs2sample @ detection_mean_y_e)
+            beta = self.detection_hyp_prior_alpha / (obs2sample @ detection_mean_y_e)
             with obs_plate, pyro.poutine.mask(mask=rna_index):
                 detection_y_c = pyro.sample(
                     "detection_y_c",
-                    dist.Gamma(detection_hyp_prior_alpha, beta),
+                    dist.Gamma(self.detection_hyp_prior_alpha, beta),
                 )  # (self.n_obs, 1)
 
         ### Chromatin model ###
@@ -445,15 +454,11 @@ class MultimodalNMFPyroModel(PyroModule):
                 .expand([self.n_batch, 1])
                 .to_event(2),
             )
-            detection_chr_hyp_prior_alpha = pyro.deterministic(
-                "detection_chr_hyp_prior_alpha",
-                self.detection_hyp_prior_alpha,
-            )
-            beta = detection_chr_hyp_prior_alpha / (obs2sample @ detection_mean_chr_y_e)
+            beta = self.detection_hyp_prior_alpha / (obs2sample @ detection_mean_chr_y_e)
             with obs_plate, pyro.poutine.mask(mask=chr_index):
                 detection_chr_y_c = pyro.sample(
                     "detection_chr_y_c",
-                    dist.Gamma(detection_chr_hyp_prior_alpha, beta),
+                    dist.Gamma(self.detection_hyp_prior_alpha, beta),
                 )  # (self.n_obs, 1)
 
         # =====================Module gene loadings ======================= #
@@ -657,10 +662,11 @@ class MultimodalNMFPyroModel(PyroModule):
             if self.n_labels > 0:
                 g_fg = torch.cat([g_fg, cell_type_g_zg], dim=-2)
             if self.use_orthogonality_constraint:
+                zero_diag = -torch.diag(self.ones.expand(g_fg.shape[-2])) + self.ones
                 pyro.sample(
                     "g_fg_constraint",
-                    dist.SoftLaplace(g_fg @ g_fg.T, self.ones / self.ten).to_event(2),
-                    obs=self.zeros.expand([g_fg.shape[-2], g_fg.shape[-2]]),
+                    dist.Normal(((g_fg @ g_fg.T) * zero_diag).sum(), self.ones / (self.ten * self.ten)).to_event(2),
+                    obs=self.zeros,
                 )
 
             # per cell biological expression
@@ -679,10 +685,11 @@ class MultimodalNMFPyroModel(PyroModule):
             if self.n_labels > 0:
                 g_fr = torch.cat([g_fr, cell_type_g_fr], dim=-2)
             if self.use_orthogonality_constraint:
+                zero_diag = -torch.diag(self.ones.expand(g_fr.shape[-2])) + self.ones
                 pyro.sample(
                     "g_fr_constraint",
-                    dist.SoftLaplace(g_fr @ g_fr.T, self.ones / self.ten).to_event(2),
-                    obs=self.zeros.expand([g_fr.shape[-2], g_fr.shape[-2]]),
+                    dist.Normal(((g_fr @ g_fr.T) * zero_diag).sum(), self.ones / (self.ten * self.ten)).to_event(2),
+                    obs=self.zeros,
                 )
 
             # per cell type and per cell rates

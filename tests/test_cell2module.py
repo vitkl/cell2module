@@ -5,16 +5,18 @@ from scvi.data import synthetic_iid
 from cell2module.models import Cell2ModuleModel
 
 
+@pytest.mark.parametrize("labels_key", [None, "labels"])
 @pytest.mark.parametrize("use_orthogonality_constraint", [True, False])
 @pytest.mark.parametrize("amortised", [True, False])
-def test_cell2location(use_orthogonality_constraint, amortised):
+@pytest.mark.parametrize("use_amortised_cell_loadings_as_prior", [True, False])
+def test_cell2location(labels_key, use_orthogonality_constraint, amortised, use_amortised_cell_loadings_as_prior):
     save_path = "./Cell2ModuleModel_model_test"
     if torch.cuda.is_available():
         use_gpu = int(torch.cuda.is_available())
     else:
         use_gpu = False
     dataset = synthetic_iid(n_labels=5)
-    Cell2ModuleModel.setup_anndata(dataset, labels_key="labels", batch_key="batch", variance_categories="batch")
+    Cell2ModuleModel.setup_anndata(dataset, labels_key=labels_key, batch_key="batch", variance_categories="batch")
 
     # train regression model to get signatures of cell types
     sc_model = Cell2ModuleModel(
@@ -24,6 +26,7 @@ def test_cell2location(use_orthogonality_constraint, amortised):
         chromatin_model=False,
         use_orthogonality_constraint=use_orthogonality_constraint,
         amortised=amortised,
+        use_amortised_cell_loadings_as_prior=use_amortised_cell_loadings_as_prior,
         encoder_mode="multiple",
     )
     # test full data training

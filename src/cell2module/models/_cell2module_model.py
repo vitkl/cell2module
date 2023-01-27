@@ -293,6 +293,10 @@ class Cell2ModuleModel(
                 use_gpu=use_gpu,
             )
         if use_aggressive_training:
+            aggressive_vars = list(self.module.list_obs_plate_vars["sites"].keys()) + ["cell_modules_w_cf_weight"]
+            aggressive_vars = aggressive_vars + [f"{i}_initial" for i in aggressive_vars]
+            aggressive_vars = aggressive_vars + [f"{i}_unconstrained" for i in aggressive_vars]
+            plan_kwargs["aggressive_vars"] = aggressive_vars
             training_plan = PyroAggressiveTrainingPlan(pyro_module=self.module, **plan_kwargs)
         else:
             training_plan = PyroTrainingPlan(pyro_module=self.module, **plan_kwargs)
@@ -304,7 +308,7 @@ class Cell2ModuleModel(
             trainer_kwargs["callbacks"] = []
         trainer_kwargs["callbacks"].append(PyroJitGuideWarmup())
         if use_aggressive_training:
-            trainer_kwargs["callbacks"].append(PyroAggressiveConvergence())
+            trainer_kwargs["callbacks"].append(PyroAggressiveConvergence(patience=100, tolerance=1e-6))
 
         runner = TrainRunner(
             self,
