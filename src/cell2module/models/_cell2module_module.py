@@ -5,6 +5,7 @@ import pandas as pd
 import pyro
 import pyro.distributions as dist
 import torch
+from pyro.infer.autoguide.utils import deep_getattr, deep_setattr
 from pyro.nn import PyroModule
 from scvi import REGISTRY_KEYS
 from scvi.nn import one_hot
@@ -79,6 +80,11 @@ class MultimodalNMFPyroModel(PyroModule):
         use_binary_chromatin: bool = False,
         use_orthogonality_constraint: bool = False,
         use_amortised_cell_loadings_as_prior: bool = False,
+        use_non_linear_decoder: bool = False,
+        n_layers=2,
+        n_hidden=256,
+        decoder_bias=True,
+        dropout_rate=0.1,
     ):
         """
         Create a Cell2module model.
@@ -103,6 +109,8 @@ class MultimodalNMFPyroModel(PyroModule):
         self.rna_model = rna_model
         self.chromatin_model = chromatin_model
 
+        self.weights = PyroModule()
+
         self.n_obs = n_obs
         self.n_vars = n_vars
         self.n_factors = n_factors
@@ -114,6 +122,11 @@ class MultimodalNMFPyroModel(PyroModule):
         self.use_binary_chromatin = use_binary_chromatin
         self.use_orthogonality_constraint = use_orthogonality_constraint
         self.use_amortised_cell_loadings_as_prior = use_amortised_cell_loadings_as_prior
+        self.use_non_linear_decoder = use_non_linear_decoder
+        self.n_layers = n_layers
+        self.n_hidden = n_hidden
+        self.decoder_bias = decoder_bias
+        self.dropout_rate = dropout_rate
 
         self.gene_bool = gene_bool.astype(int).flatten()
         self.gene_ind = np.where(gene_bool)[0]
@@ -330,6 +343,112 @@ class MultimodalNMFPyroModel(PyroModule):
             },
         }
 
+    def get_layernorm(self, name, layer, norm_shape):
+
+        if getattr(self.weights, f"{name}_layer_{layer}_layer_norm", None) is None:
+            deep_setattr(
+                self.weights,
+                f"{name}_layer_{layer}_layer_norm",
+                torch.nn.LayerNorm(norm_shape, elementwise_affine=False),
+            )
+        layer_norm = deep_getattr(self.weights, f"{name}_layer_{layer}_layer_norm")
+        return layer_norm
+
+    def get_activation(self, name, layer):
+
+        if getattr(self.weights, f"{name}_layer_{layer}_activation_fn", None) is None:
+            deep_setattr(
+                self.weights,
+                f"{name}_layer_{layer}_activation_fn",
+                torch.nn.Softplus(),
+            )
+        activation_fn = deep_getattr(self.weights, f"{name}_layer_{layer}_activation_fn")
+        return activation_fn
+
+    def get_weight(self, weights_name, weights_shape):
+        if not hasattr(self.weights, weights_name):
+            deep_setattr(
+                self.weights,
+                weights_name,
+                pyro.nn.PyroSample(
+                    lambda prior: dist.SoftLaplace(
+                        self.zeros,
+                        self.ones,
+                    )
+                    .expand(weights_shape)
+                    .to_event(len(weights_shape)),
+                ),
+            )
+        return deep_getattr(self.weights, weights_name)
+
+    def get_bias(self, bias_name, bias_shape):
+        if not hasattr(self.weights, bias_name):
+            deep_setattr(
+                self.weights,
+                bias_name,
+                pyro.nn.PyroSample(
+                    lambda prior: dist.SoftLaplace(
+                        self.zeros,
+                        self.ones,
+                    )
+                    .expand(bias_shape)
+                    .to_event(len(bias_shape)),
+                ),
+            )
+        return deep_getattr(self.weights, bias_name)
+
+    def bayesian_fclayers(
+        self,
+        x: torch.Tensor,
+        n_in: int,
+        n_out: int,
+        name="fc_genes",
+    ):
+        for i in range(self.n_layers):
+            layer = i + 1
+            if layer == self.n_layers:
+                # last layer
+                weights_shape = [n_out, self.n_hidden]
+            elif layer == 1:
+                # first layer
+                bias_shape = [1, self.n_hidden]
+                weights_shape = [self.n_hidden, n_in]
+            else:
+                # middle layers
+                bias_shape = [1, self.n_hidden]
+                weights_shape = [self.n_hidden, self.n_hidden]
+
+            # optionally apply dropout ==========
+            if self.dropout_rate > 0:
+                if getattr(self.weights, f"{name}_layer_{layer}_dropout", None) is None:
+                    deep_setattr(
+                        self.weights,
+                        f"{name}_layer_{layer}_dropout",
+                        torch.nn.Dropout(p=self.dropout_rate),
+                    )
+                dropout = deep_getattr(self.weights, f"{name}_layer_{layer}_dropout")
+                x = dropout(x)
+
+            # generate parameters ==========
+            weights_name = f"{name}_layer{layer}_weight"
+            weights = self.get_weight(weights_name, weights_shape)
+            # compute weighted sum using einsum ==========
+            weights = weights / torch.tensor(float(self.n_hidden), device=weights.device).pow(0.5)
+            x = torch.einsum("hf,cf->ch", weights, x)
+            # optionally add bias term
+            if (layer < self.n_layers) and self.decoder_bias:
+                bias_name = f"{name}_layer{layer}_bias"
+                bias = self.get_bias(bias_name, bias_shape)
+                x = x + bias
+            # apply layernorm ==========
+            layer_norm = self.get_layernorm(name=name, layer=layer, norm_shape=[weights_shape[0]])
+            x = layer_norm(x)
+            # apply activation ==========
+            activation_fn = self.get_activation(name, layer)
+            x = activation_fn(x)
+
+        return x
+
     def forward(
         self,
         x_data,
@@ -399,8 +518,8 @@ class MultimodalNMFPyroModel(PyroModule):
                 cell_modules_w_cf_weight = pyro.sample(
                     f"{k_}_weight",
                     dist.Gamma(
-                        self.ten * self.ones_1_n_factors,
-                        self.ten,
+                        (self.ones + self.ones) * self.ones_1_n_factors,
+                        (self.ones + self.ones),
                     ),
                     obs=apply_plate_to_fixed(getattr(self, f"fixed_val_{k_}_weight", None), ind),
                 )  # (self.n_obs, self.n_factors)
@@ -463,7 +582,7 @@ class MultimodalNMFPyroModel(PyroModule):
 
         # =====================Module gene loadings ======================= #
         ### RNA model ###
-        if self.rna_model:
+        if self.rna_model and not self.use_non_linear_decoder:
             # g_{f,g}
             factor_level_g = pyro.sample(
                 "factor_level_g",
@@ -493,7 +612,7 @@ class MultimodalNMFPyroModel(PyroModule):
                 )
 
         ### Chromatin model ###
-        if self.chromatin_model:
+        if self.chromatin_model and not self.use_non_linear_decoder:
             # g_{f,r}
             factor_level_r = pyro.sample(
                 "factor_level_r",
@@ -658,19 +777,27 @@ class MultimodalNMFPyroModel(PyroModule):
 
         if self.rna_model:
             ### RNA model ###
-            # concatenate cell_type_g_zg with g_fg
-            if self.n_labels > 0:
-                g_fg = torch.cat([g_fg, cell_type_g_zg], dim=-2)
-            if self.use_orthogonality_constraint:
-                zero_diag = -torch.diag(torch.tensor(1.0, device=x_data.device).expand(g_fg.shape[-2])) + self.ones
-                pyro.sample(
-                    "g_fg_constraint",
-                    dist.Normal(((g_fg @ g_fg.T) * zero_diag).sum(), self.ones / (self.ten * self.ten)).to_event(2),
-                    obs=self.zeros,
+            if self.use_non_linear_decoder:
+                # use a non-linear decoder to model the expected expression
+                mu_biol = self.bayesian_fclayers(
+                    cell_modules_w_cf,
+                    n_in=self.n_factors + self.n_labels,
+                    n_out=self.n_genes,
                 )
+            else:
+                # concatenate cell_type_g_zg with g_fg
+                if self.n_labels > 0:
+                    g_fg = torch.cat([g_fg, cell_type_g_zg], dim=-2)
+                if self.use_orthogonality_constraint:
+                    zero_diag = -torch.diag(torch.tensor(1.0, device=x_data.device).expand(g_fg.shape[-2])) + self.ones
+                    pyro.sample(
+                        "g_fg_constraint",
+                        dist.Normal(((g_fg @ g_fg.T) * zero_diag).sum(), self.ones).to_event(2),
+                        obs=self.zeros,
+                    )
 
-            # per cell biological expression
-            mu_biol = cell_modules_w_cf @ g_fg
+                # per cell biological expression
+                mu_biol = cell_modules_w_cf @ g_fg
 
             mu = (
                 (mu_biol + obs2sample @ s_g_gene_add)  # contaminating RNA
@@ -681,20 +808,30 @@ class MultimodalNMFPyroModel(PyroModule):
         # =====================Expected chromatin state ======================= #
         if self.chromatin_model:
             ### Chromatin model ###
-            # concatenate cell_type_g_fr with g_fr
-            if self.n_labels > 0:
-                g_fr = torch.cat([g_fr, cell_type_g_fr], dim=-2)
-            if self.use_orthogonality_constraint:
-                zero_diag = -torch.diag(torch.tensor(1.0, device=x_data.device).expand(g_fr.shape[-2])) + self.ones
-                pyro.sample(
-                    "g_fr_constraint",
-                    dist.Normal(((g_fr @ g_fr.T) * zero_diag).sum(), self.ones / (self.ten * self.ten)).to_event(2),
-                    obs=self.zeros,
+            if self.use_non_linear_decoder:
+                # use a non-linear decoder to model the expected accessibility
+                kon_cr = self.bayesian_fclayers(
+                    cell_modules_w_cf,
+                    n_in=self.n_factors + self.n_labels,
+                    n_out=self.n_regions,
+                    name="accessibility",
                 )
+            else:
+                # concatenate cell_type_g_fr with g_fr
+                if self.n_labels > 0:
+                    g_fr = torch.cat([g_fr, cell_type_g_fr], dim=-2)
+                if self.use_orthogonality_constraint:
+                    zero_diag = -torch.diag(torch.tensor(1.0, device=x_data.device).expand(g_fr.shape[-2])) + self.ones
+                    pyro.sample(
+                        "g_fr_constraint",
+                        dist.Normal(((g_fr @ g_fr.T) * zero_diag).sum(), self.ones).to_event(2),
+                        obs=self.zeros,
+                    )
+                kon_cr = cell_modules_w_cf @ g_fr
 
             # per cell type and per cell rates
             # \mu_{f,r}
-            kon_cr = (cell_modules_w_cf @ g_fr + obs2sample @ region_add_er) * (obs2sample @ region_y_er)
+            kon_cr = (kon_cr + obs2sample @ region_add_er) * (obs2sample @ region_y_er)
             # per cell technical detection probabilities
             kon_cr = kon_cr * detection_chr_y_c
 
