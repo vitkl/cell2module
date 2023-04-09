@@ -344,7 +344,6 @@ class MultimodalNMFPyroModel(PyroModule):
         }
 
     def get_layernorm(self, name, layer, norm_shape):
-
         if getattr(self.weights, f"{name}_layer_{layer}_layer_norm", None) is None:
             deep_setattr(
                 self.weights,
@@ -355,7 +354,6 @@ class MultimodalNMFPyroModel(PyroModule):
         return layer_norm
 
     def get_activation(self, name, layer):
-
         if getattr(self.weights, f"{name}_layer_{layer}_activation_fn", None) is None:
             deep_setattr(
                 self.weights,
