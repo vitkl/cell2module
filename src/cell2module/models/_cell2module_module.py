@@ -8,7 +8,7 @@ import torch
 from pyro.infer.autoguide.utils import deep_getattr, deep_setattr
 from pyro.nn import PyroModule
 from scvi import REGISTRY_KEYS
-from scvi.nn import one_hot
+from scvi.nn import FCLayers, one_hot
 
 
 class MultimodalNMFPyroModel(PyroModule):
@@ -81,8 +81,9 @@ class MultimodalNMFPyroModel(PyroModule):
         use_orthogonality_constraint: bool = False,
         use_amortised_cell_loadings_as_prior: bool = False,
         use_non_linear_decoder: bool = False,
+        bayesian_decoder: bool = False,
         n_layers=2,
-        n_hidden=256,
+        n_hidden=1024,
         decoder_bias=True,
         dropout_rate=0.1,
     ):
@@ -123,6 +124,7 @@ class MultimodalNMFPyroModel(PyroModule):
         self.use_orthogonality_constraint = use_orthogonality_constraint
         self.use_amortised_cell_loadings_as_prior = use_amortised_cell_loadings_as_prior
         self.use_non_linear_decoder = use_non_linear_decoder
+        self.bayesian_decoder = bayesian_decoder
         self.n_layers = n_layers
         self.n_hidden = n_hidden
         self.decoder_bias = decoder_bias
@@ -280,6 +282,10 @@ class MultimodalNMFPyroModel(PyroModule):
             label_index = tensor_dict[REGISTRY_KEYS.LABELS_KEY]
         else:
             label_index = tensor_dict[REGISTRY_KEYS.BATCH_KEY]
+        if "offset" in tensor_dict.keys():
+            offset = tensor_dict["offset"]
+        else:
+            offset = None
         rna_index = tensor_dict["rna_index"].bool()
         chr_index = tensor_dict["chr_index"].bool()
         extra_categoricals = tensor_dict[REGISTRY_KEYS.CAT_COVS_KEY]
@@ -293,6 +299,7 @@ class MultimodalNMFPyroModel(PyroModule):
             chr_index,
             extra_categoricals,
             var_categoricals,
+            offset,
         ), {}
 
     def create_plates(
@@ -305,6 +312,7 @@ class MultimodalNMFPyroModel(PyroModule):
         chr_index,
         extra_categoricals,
         var_categoricals,
+        offset,
     ):
         return pyro.plate("obs_plate", size=self.n_obs, dim=-2, subsample=idx)
 
@@ -344,7 +352,6 @@ class MultimodalNMFPyroModel(PyroModule):
         }
 
     def get_layernorm(self, name, layer, norm_shape):
-
         if getattr(self.weights, f"{name}_layer_{layer}_layer_norm", None) is None:
             deep_setattr(
                 self.weights,
@@ -355,7 +362,6 @@ class MultimodalNMFPyroModel(PyroModule):
         return layer_norm
 
     def get_activation(self, name, layer):
-
         if getattr(self.weights, f"{name}_layer_{layer}_activation_fn", None) is None:
             deep_setattr(
                 self.weights,
@@ -449,6 +455,32 @@ class MultimodalNMFPyroModel(PyroModule):
 
         return x
 
+    def fclayers(
+        self,
+        x: torch.Tensor,
+        n_in: int,
+        n_out: int,
+        name="fc_genes",
+    ):
+        if getattr(self.weights, f"{name}", None) is None:
+            deep_setattr(
+                self.weights,
+                f"{name}",
+                FCLayers(
+                    n_in=n_in,
+                    n_out=n_out,
+                    n_cat_list=None,
+                    n_layers=self.n_layers,
+                    n_hidden=self.n_hidden,
+                    dropout_rate=0.1,
+                    use_batch_norm=False,
+                    use_layer_norm=True,
+                    activation_fn=torch.nn.Softplus,
+                ).to(x.device),
+            )
+        decoder = deep_getattr(self.weights, f"{name}").to(x.device)
+        return decoder(x)
+
     def forward(
         self,
         x_data,
@@ -459,6 +491,7 @@ class MultimodalNMFPyroModel(PyroModule):
         chr_index,
         extra_categoricals,
         var_categoricals,
+        offset=None,
     ):
         obs2sample = one_hot(batch_index, self.n_batch)
         if self.n_labels > 0:
@@ -483,6 +516,7 @@ class MultimodalNMFPyroModel(PyroModule):
             chr_index,
             extra_categoricals,
             var_categoricals,
+            offset,
         )
 
         def apply_plate_to_fixed(x, index):
@@ -779,7 +813,11 @@ class MultimodalNMFPyroModel(PyroModule):
             ### RNA model ###
             if self.use_non_linear_decoder:
                 # use a non-linear decoder to model the expected expression
-                mu_biol = self.bayesian_fclayers(
+                if self.bayesian_decoder:
+                    fclayers = self.bayesian_fclayers
+                else:
+                    fclayers = self.fclayers
+                mu_biol = fclayers(
                     cell_modules_w_cf,
                     n_in=self.n_factors + self.n_labels,
                     n_out=self.n_genes,
@@ -804,13 +842,19 @@ class MultimodalNMFPyroModel(PyroModule):
                 * detection_y_c
                 * (obs2extra_categoricals @ detection_tech_gene_tg)
             )  # cell and gene-specific normalisation
+            if offset is not None:
+                mu = mu * offset
 
         # =====================Expected chromatin state ======================= #
         if self.chromatin_model:
             ### Chromatin model ###
             if self.use_non_linear_decoder:
                 # use a non-linear decoder to model the expected accessibility
-                kon_cr = self.bayesian_fclayers(
+                if self.bayesian_decoder:
+                    fclayers = self.bayesian_fclayers
+                else:
+                    fclayers = self.fclayers
+                kon_cr = fclayers(
                     cell_modules_w_cf,
                     n_in=self.n_factors + self.n_labels,
                     n_out=self.n_regions,
@@ -837,6 +881,9 @@ class MultimodalNMFPyroModel(PyroModule):
 
             if self.use_binary_chromatin:
                 pon_cr = kon_cr / (kon_cr + self.ones)
+
+            if offset is not None:
+                kon_cr = kon_cr * offset
 
         # =====================DATA likelihood ======================= #
         ### RNA model ###

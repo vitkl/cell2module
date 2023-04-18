@@ -153,6 +153,7 @@ class Cell2ModuleModel(
         categorical_covariate_keys: Optional[List[str]] = None,
         continuous_covariate_keys: Optional[List[str]] = None,
         gene_bool_key: Optional[str] = None,
+        offset_key: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -212,6 +213,8 @@ class Cell2ModuleModel(
             anndata_fields.append(CategoricalObsField(REGISTRY_KEYS.LABELS_KEY, labels_key))
         if continuous_covariate_keys is not None:
             anndata_fields.append(NumericalJointObsField(REGISTRY_KEYS.CONT_COVS_KEY, continuous_covariate_keys))
+        if offset_key is not None:
+            anndata_fields.append(NumericalObsField("offset", offset_key))
 
         adata_manager = AnnDataManager(fields=anndata_fields, setup_method_args=setup_method_args)
         adata_manager.register_fields(adata, **kwargs)

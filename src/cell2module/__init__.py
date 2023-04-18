@@ -7,6 +7,7 @@ from rich.logging import RichHandler
 from torch.distributions import biject_to, transform_to
 
 from .models import Cell2ModuleModel
+from .tl import _initialisation
 
 # https://github.com/python-poetry/poetry/pull/2366#issuecomment-652418094
 # https://github.com/python-poetry/poetry/issues/144#issuecomment-623927302
