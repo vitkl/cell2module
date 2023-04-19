@@ -86,6 +86,7 @@ class MultimodalNMFPyroModel(PyroModule):
         n_hidden=1024,
         decoder_bias=True,
         dropout_rate=0.1,
+        use_offset: bool = False,
     ):
         """
         Create a Cell2module model.
@@ -129,6 +130,7 @@ class MultimodalNMFPyroModel(PyroModule):
         self.n_hidden = n_hidden
         self.decoder_bias = decoder_bias
         self.dropout_rate = dropout_rate
+        self.use_offset = use_offset
 
         self.gene_bool = gene_bool.astype(int).flatten()
         self.gene_ind = np.where(gene_bool)[0]
@@ -285,7 +287,7 @@ class MultimodalNMFPyroModel(PyroModule):
         if "offset" in tensor_dict.keys():
             offset = tensor_dict["offset"]
         else:
-            offset = None
+            offset = batch_index
         rna_index = tensor_dict["rna_index"].bool()
         chr_index = tensor_dict["chr_index"].bool()
         extra_categoricals = tensor_dict[REGISTRY_KEYS.CAT_COVS_KEY]
@@ -491,8 +493,10 @@ class MultimodalNMFPyroModel(PyroModule):
         chr_index,
         extra_categoricals,
         var_categoricals,
-        offset=None,
+        offset,
     ):
+        if not self.use_offset:
+            offset = None
         obs2sample = one_hot(batch_index, self.n_batch)
         if self.n_labels > 0:
             obs2label = one_hot(label_index, self.n_labels)
