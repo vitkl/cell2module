@@ -4,34 +4,26 @@ from typing import List, Optional, Union
 
 import numpy as np
 from anndata import AnnData
-from cell2location.models.base._pyro_mixin import (
-    PltExportMixin,
-    PyroAggressiveConvergence,
-    PyroAggressiveTrainingPlan,
-    PyroTrainingPlan,
-    QuantileMixin,
-)
+from cell2location.models.base._pyro_mixin import (PltExportMixin,
+                                                   PyroAggressiveConvergence,
+                                                   PyroAggressiveTrainingPlan,
+                                                   PyroTrainingPlan,
+                                                   QuantileMixin)
 from pyro import clear_param_store
 from pyro.infer.autoguide import AutoHierarchicalNormalMessenger
 from scvi import REGISTRY_KEYS
 from scvi.data import AnnDataManager
-from scvi.data.fields import (
-    CategoricalJointObsField,
-    CategoricalObsField,
-    LayerField,
-    NumericalJointObsField,
-    NumericalObsField,
-)
+from scvi.data.fields import (CategoricalJointObsField, CategoricalObsField,
+                              LayerField, NumericalJointObsField,
+                              NumericalObsField)
 from scvi.dataloaders import DataSplitter, DeviceBackedDataSplitter
 from scvi.model.base import BaseModelClass, PyroSampleMixin, PyroSviTrainMixin
 from scvi.model.base._pyromixin import PyroJitGuideWarmup
 from scvi.train import TrainRunner
 from scvi.utils import setup_anndata_dsp
 
-from cell2module.models._base_module import (
-    RegressionBaseModule,
-    compute_cluster_summary,
-)
+from cell2module.models._base_module import (RegressionBaseModule,
+                                             compute_cluster_summary)
 from cell2module.models._cell2module_module import MultimodalNMFPyroModel
 
 logger = logging.getLogger(__name__)
