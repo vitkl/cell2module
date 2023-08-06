@@ -98,31 +98,34 @@ def find_waypoint_gene_clusters(
     labels_key=None,
     label_filter=None,
     verbose=True,
+    gene_rates=None,
 ):
     """Find gene clusters using PCA and leiden clustering"""
     init_n_factors = n_factors
 
-    if labels_key is not None:
-        from cell2location.cluster_averages import compute_cluster_averages
+    if gene_rates is None:
+        if labels_key is not None:
+            from cell2location.cluster_averages import compute_cluster_averages
 
-        aver = compute_cluster_averages(adata_neighbours, labels_key, use_raw=False)
-        if label_filter is not None:
-            aver = aver.loc[:, label_filter]
-        gene_rates = {"aver": aver}
-        for k in ["aver"]:
-            gene_rates[k + "_norm"] = (
-                gene_rates[k].T / (gene_rates[k].sum(1) + np.random.gamma(1e2, 1e-8, size=gene_rates[k].sum(1).shape))
-            ).T
-    else:
-        # Use PCs
-        aver = pd.DataFrame(
-            adata_neighbours.varm["PCs"],
-            index=adata_neighbours.var_names,
-            columns=[f"PC_{i + 1}" for i in range(adata_neighbours.varm["PCs"].shape[1])],
-        )
-        gene_rates = {"aver": aver}
-        for k in ["aver"]:
-            gene_rates[k + "_norm"] = (gene_rates[k].T / gene_rates[k].abs().max(1)).T
+            aver = compute_cluster_averages(adata_neighbours, labels_key, use_raw=False)
+            if label_filter is not None:
+                aver = aver.loc[:, label_filter]
+            gene_rates = {"aver": aver}
+            for k in ["aver"]:
+                gene_rates[k + "_norm"] = (
+                    gene_rates[k].T
+                    / (gene_rates[k].sum(1) + np.random.gamma(1e2, 1e-8, size=gene_rates[k].sum(1).shape))
+                ).T
+        else:
+            # Use PCs
+            aver = pd.DataFrame(
+                adata_neighbours.varm["PCs"],
+                index=adata_neighbours.var_names,
+                columns=[f"PC_{i + 1}" for i in range(adata_neighbours.varm["PCs"].shape[1])],
+            )
+            gene_rates = {"aver": aver}
+            for k in ["aver"]:
+                gene_rates[k + "_norm"] = (gene_rates[k].T / gene_rates[k].abs().max(1)).T
 
     # compute KNN for genes and cluster genes by bursting rates at meta-cells
     adata_neighbours_g = adata_neighbours[0:10, :].copy().T
@@ -267,7 +270,7 @@ def compute_pcs_knn_umap(
         sc.pp.scale(adata_subset, max_value=scale_max_value)
     else:
         for tech in adata_subset.obs[tech_category_key].unique():
-            mu, std = compute_mu_std(adata_subset[adata_subset.obs[tech_category_key] == tech])
+            mu, std = compute_mu_std(adata_subset[adata_subset.obs[tech_category_key] == tech].X)
             adata_subset[adata_subset.obs[tech_category_key] == tech].X = np.minimum(
                 (adata_subset[adata_subset.obs[tech_category_key] == tech].X - mu) / std, scale_max_value
             )
@@ -340,12 +343,18 @@ def align_plot_stability(fac1, fac2, name1, name2, align=True, return_aligned=Fa
 
 
 def knn_building(
-    adata_sample, run_name, use_rep="q50_cell_modules_w_cf", plot_category_keys=list(), figsize=(8, 8), resolution=5.0
+    adata_sample,
+    run_name,
+    use_rep="q50_cell_modules_w_cf",
+    plot_category_keys=list(),
+    figsize=(8, 8),
+    resolution=5.0,
+    n_neighbors=50,
 ):
     """Build KNN graph using adata_sample.obsm[use_rep] as representation"""
     ########## KNN building #####################
     # compute KNN using the model output
-    sc.pp.neighbors(adata_sample, use_rep=use_rep, n_neighbors=50, metric="correlation")
+    sc.pp.neighbors(adata_sample, use_rep=use_rep, n_neighbors=n_neighbors, metric="correlation")
     # adata_sample.obsp['connectivities'].data[adata_sample.obsp['connectivities'].data > 0.05] = 0
     # adata_sample.obsp['distances'].data[adata_sample.obsp['distances'].data > 0.1] = 0
 
