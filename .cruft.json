@@ -1,23 +1,23 @@
 {
-    "template": "https://github.com/scverse/cookiecutter-scverse",
-    "commit": "7cc5403b05e299d7a4bb169c2bd8c27a2a7676f3",
-    "checkout": null,
-    "context": {
-        "cookiecutter": {
-            "project_name": "cell2module",
-            "package_name": "cell2module",
-            "project_description": "cell2module: gene module discovery from scRNA and scATAC using count-based Bayesian NMF",
-            "author_full_name": "Vitalii Kleshchevnikov",
-            "author_email": "vitalii.kleshchevnikov@sanger.ac.uk",
-            "github_user": "vitkl",
-            "project_repo": "https://github.com/vitkl/cell2module",
-            "license": "Apache License Version 2.0",
-            "_copy_without_render": [
-                ".github/workflows/**.yaml",
-                "docs/_templates/autosummary/**.rst"
-            ],
-            "_template": "https://github.com/scverse/cookiecutter-scverse"
-        }
-    },
-    "directory": null
+  "template": "https://github.com/scverse/cookiecutter-scverse",
+  "commit": "605f95714130c960bce12eab98a4e023e8932249",
+  "checkout": "v0.2.22",
+  "context": {
+    "cookiecutter": {
+      "project_name": "cell2module",
+      "package_name": "cell2module",
+      "project_description": "cell2module: gene module discovery from scRNA and scATAC using count-based Bayesian NMF",
+      "author_full_name": "Vitalii Kleshchevnikov",
+      "author_email": "vitalii.kleshchevnikov@sanger.ac.uk",
+      "github_user": "vitkl",
+      "project_repo": "https://github.com/vitkl/cell2module",
+      "license": "Apache License Version 2.0",
+      "_copy_without_render": [
+        ".github/workflows/**.yaml",
+        "docs/_templates/autosummary/**.rst"
+      ],
+      "_template": "https://github.com/scverse/cookiecutter-scverse"
+    }
+  },
+  "directory": null
 }
