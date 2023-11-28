@@ -223,7 +223,8 @@ class Cell2ModuleModel(
     def train(
         self,
         max_epochs: Optional[int] = 1000,
-        use_gpu: Optional[Union[str, int, bool]] = None,
+        accelerator: str = "auto",
+        device: Union[int, str] = "auto",
         train_size: float = 1,
         validation_size: Optional[float] = None,
         batch_size: int = 256,
@@ -285,7 +286,8 @@ class Cell2ModuleModel(
                 train_size=train_size,
                 validation_size=validation_size,
                 batch_size=batch_size,
-                use_gpu=use_gpu,
+                accelerator=accelerator,
+                device=device,
             )
         else:
             data_splitter = DataSplitter(
@@ -293,7 +295,8 @@ class Cell2ModuleModel(
                 train_size=train_size,
                 validation_size=validation_size,
                 batch_size=batch_size,
-                use_gpu=use_gpu,
+                accelerator=accelerator,
+                device=device,
             )
         if use_aggressive_training:
             aggressive_vars = list(self.module.list_obs_plate_vars["sites"].keys()) + ["cell_modules_w_cf_weight"]
@@ -318,7 +321,8 @@ class Cell2ModuleModel(
             training_plan=training_plan,
             data_splitter=data_splitter,
             max_epochs=max_epochs,
-            use_gpu=use_gpu,
+            accelerator=accelerator,
+            device=device,
             **trainer_kwargs,
         )
         with warnings.catch_warnings():
